@@ -1,0 +1,25 @@
+# Build output
+target/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Kiro spec files
+.kiro/
+
+# Batch scripts
+*.bat
+
+# Maven wrapper (if added later)
+.mvn/
+mvnw
+mvnw.cmd
