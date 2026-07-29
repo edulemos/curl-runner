@@ -22,42 +22,42 @@ public class CurlParserServiceImpl implements CurlParserService {
     private void validateSecurity(String curlCommand) throws CurlParseException {
         if (curlCommand.contains("||")) {
             throw new CurlParseException(
-                "Comando cURL rejeitado: contém operador de pipe duplo '||' que representa risco de injeção de shell");
+                "cURL command rejected: contains double pipe '||' (shell injection risk)");
         }
         if (curlCommand.contains("&&")) {
             throw new CurlParseException(
-                "Comando cURL rejeitado: contém operador '&&' que representa risco de injeção de shell");
+                "cURL command rejected: contains '&&' operator (shell injection risk)");
         }
         if (curlCommand.contains("$(")) {
             throw new CurlParseException(
-                "Comando cURL rejeitado: contém substituição de comando '$(' que representa risco de injeção de shell");
+                "cURL command rejected: contains command substitution '$(' (shell injection risk)");
         }
         if (curlCommand.contains("|")) {
             throw new CurlParseException(
-                "Comando cURL rejeitado: contém caractere de pipe '|' que representa risco de injeção de shell");
+                "cURL command rejected: contains pipe '|' character (shell injection risk)");
         }
         if (curlCommand.contains(">")) {
             throw new CurlParseException(
-                "Comando cURL rejeitado: contém redirecionamento de saída '>' que representa risco de injeção de shell");
+                "cURL command rejected: contains output redirection '>' (shell injection risk)");
         }
         if (curlCommand.contains("<")) {
             throw new CurlParseException(
-                "Comando cURL rejeitado: contém redirecionamento de entrada '<' que representa risco de injeção de shell");
+                "cURL command rejected: contains input redirection '<' (shell injection risk)");
         }
         if (curlCommand.contains("`")) {
             throw new CurlParseException(
-                "Comando cURL rejeitado: contém backtick '`' que representa risco de injeção de shell");
+                "cURL command rejected: contains backtick '`' (shell injection risk)");
         }
         if (curlCommand.contains(";")) {
             throw new CurlParseException(
-                "Comando cURL rejeitado: contém ponto e vírgula ';' que representa risco de injeção de shell");
+                "cURL command rejected: contains semicolon ';' (shell injection risk)");
         }
     }
 
     @Override
     public ParsedRequest parse(String curlCommand) throws CurlParseException {
         if (curlCommand == null || curlCommand.isBlank()) {
-            throw new CurlParseException("Comando cURL não pode ser vazio");
+            throw new CurlParseException("cURL command cannot be empty");
         }
 
         validateSecurity(curlCommand);
@@ -65,7 +65,7 @@ public class CurlParserServiceImpl implements CurlParserService {
         List<String> tokens = CurlTokenizer.tokenize(curlCommand);
 
         if (tokens.isEmpty() || !tokens.get(0).equalsIgnoreCase("curl")) {
-            throw new CurlParseException("Comando deve começar com 'curl'");
+            throw new CurlParseException("Command must start with 'curl'");
         }
 
         ParsedRequest request = new ParsedRequest();
@@ -79,7 +79,7 @@ public class CurlParserServiceImpl implements CurlParserService {
                 case "--request":
                     i++;
                     if (i >= tokens.size()) {
-                        throw new CurlParseException("Flag " + token + " requer um valor");
+                        throw new CurlParseException("Flag " + token + " requires a value");
                     }
                     request.setMethod(tokens.get(i).toUpperCase());
                     explicitMethod = true;
@@ -89,7 +89,7 @@ public class CurlParserServiceImpl implements CurlParserService {
                 case "--header":
                     i++;
                     if (i >= tokens.size()) {
-                        throw new CurlParseException("Flag " + token + " requer um valor");
+                        throw new CurlParseException("Flag " + token + " requires a value");
                     }
                     String headerStr = tokens.get(i);
                     String[] parts = headerStr.split(":", 2);
@@ -103,7 +103,7 @@ public class CurlParserServiceImpl implements CurlParserService {
                 case "--data-raw":
                     i++;
                     if (i >= tokens.size()) {
-                        throw new CurlParseException("Flag " + token + " requer um valor");
+                        throw new CurlParseException("Flag " + token + " requires a value");
                     }
                     request.setBody(tokens.get(i));
                     if (!explicitMethod) {
@@ -115,7 +115,7 @@ public class CurlParserServiceImpl implements CurlParserService {
                 case "--user":
                     i++;
                     if (i >= tokens.size()) {
-                        throw new CurlParseException("Flag " + token + " requer um valor");
+                        throw new CurlParseException("Flag " + token + " requires a value");
                     }
                     request.setBasicAuth(tokens.get(i));
                     break;
@@ -123,7 +123,7 @@ public class CurlParserServiceImpl implements CurlParserService {
                 case "--url":
                     i++;
                     if (i >= tokens.size()) {
-                        throw new CurlParseException("Flag " + token + " requer um valor");
+                        throw new CurlParseException("Flag " + token + " requires a value");
                     }
                     request.setUrl(tokens.get(i));
                     break;
@@ -138,7 +138,7 @@ public class CurlParserServiceImpl implements CurlParserService {
         }
 
         if (request.getUrl() == null) {
-            throw new CurlParseException("URL não encontrada no comando cURL");
+            throw new CurlParseException("URL not found in cURL command");
         }
 
         return request;

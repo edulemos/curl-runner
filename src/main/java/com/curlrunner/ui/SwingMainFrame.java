@@ -69,33 +69,23 @@ public class SwingMainFrame extends JFrame {
         setSize(900, 700);
         setLayout(new BorderLayout());
 
-        // Input panel at the top
+        // Top section: Input panel (includes buttons)
         add(inputPanel, BorderLayout.NORTH);
 
         // Results panel in the center
         add(resultsPanel, BorderLayout.CENTER);
 
-        // Bottom panel with buttons and progress bar
-        JPanel southPanel = new JPanel(new BorderLayout());
-
-        // Buttons panel
-        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        executeButton = new JButton("Executar");
-        cancelButton = new JButton("Cancelar");
-        cancelButton.setEnabled(false);
-        buttonsPanel.add(executeButton);
-        buttonsPanel.add(cancelButton);
-        southPanel.add(buttonsPanel, BorderLayout.NORTH);
-
-        // Progress bar
+        // Progress bar at the bottom
         progressBar = new JProgressBar(0, 100);
         progressBar.setValue(0);
         progressBar.setStringPainted(true);
         progressBar.setString("0 / 0");
         progressBar.setVisible(false);
-        southPanel.add(progressBar, BorderLayout.SOUTH);
+        add(progressBar, BorderLayout.SOUTH);
 
-        add(southPanel, BorderLayout.SOUTH);
+        // Get button references from InputPanel
+        executeButton = inputPanel.getExecuteButton();
+        cancelButton = inputPanel.getCancelButton();
 
         // Register Execute button ActionListener
         executeButton.addActionListener(e -> onExecuteClicked());
@@ -120,8 +110,8 @@ public class SwingMainFrame extends JFrame {
         String curlCommand = inputPanel.getCurlCommand();
         if (curlCommand == null || curlCommand.trim().isEmpty()) {
             JOptionPane.showMessageDialog(this,
-                "Por favor, insira um comando cURL.",
-                "Erro de Validação",
+                "Please enter a cURL command.",
+                "Validation Error",
                 JOptionPane.ERROR_MESSAGE);
             return;
         }
@@ -133,13 +123,18 @@ public class SwingMainFrame extends JFrame {
             inputPanel.isParallel()
         );
 
+        // Set data list if loaded (data-driven execution)
+        if (inputPanel.getLoadedData() != null) {
+            config.setDataList(inputPanel.getLoadedData());
+        }
+
         // 3. Validate the config
         try {
             config.validate();
         } catch (IllegalArgumentException ex) {
             JOptionPane.showMessageDialog(this,
                 ex.getMessage(),
-                "Erro de Validação",
+                "Validation Error",
                 JOptionPane.ERROR_MESSAGE);
             return;
         }
@@ -151,7 +146,7 @@ public class SwingMainFrame extends JFrame {
         } catch (CurlParseException ex) {
             JOptionPane.showMessageDialog(this,
                 ex.getMessage(),
-                "Erro de Parsing",
+                "Parse Error",
                 JOptionPane.ERROR_MESSAGE);
             return;
         }
@@ -182,8 +177,8 @@ public class SwingMainFrame extends JFrame {
                 SwingUtilities.invokeLater(() -> {
                     currentRunId = null;
                     JOptionPane.showMessageDialog(SwingMainFrame.this,
-                        "Erro durante execução: " + ex.getMessage(),
-                        "Erro de Execução",
+                        "Execution error: " + ex.getMessage(),
+                        "Execution Error",
                         JOptionPane.ERROR_MESSAGE);
                     setExecutionState(ExecutionState.IDLE);
                 });
@@ -292,7 +287,7 @@ public class SwingMainFrame extends JFrame {
      */
     public void showError(String message) {
         SwingUtilities.invokeLater(() ->
-            JOptionPane.showMessageDialog(this, message, "Erro", JOptionPane.ERROR_MESSAGE)
+            JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE)
         );
     }
 }

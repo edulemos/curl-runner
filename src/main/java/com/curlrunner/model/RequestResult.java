@@ -27,6 +27,8 @@ public class RequestResult {
 
     private LocalDateTime executedAt;
 
+    private String responseBody;
+
     public Long getId() {
         return id;
     }
@@ -97,5 +99,13 @@ public class RequestResult {
 
     public void setExecutedAt(LocalDateTime executedAt) {
         this.executedAt = executedAt;
+    }
+
+    public String getResponseBody() {
+        return responseBody;
+    }
+
+    public void setResponseBody(String responseBody) {
+        this.responseBody = responseBody;
     }
 }

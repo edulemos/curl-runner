@@ -6,6 +6,7 @@ import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -41,7 +42,7 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
         // Create and persist ExecutionRun with status PENDING
         ExecutionRun run = new ExecutionRun();
         run.setCurlCommand(request.getUrl());
-        run.setTotalIterations(config.getIterations());
+        run.setTotalIterations(config.getEffectiveIterations());
         run.setDelayMs(config.getDelayMs());
         run.setParallel(config.isParallel());
         run.setStatus(ExecutionStatus.PENDING);
@@ -58,14 +59,11 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
         run = executionRunRepository.save(run);
 
         try {
-            // Convert ParsedRequest to HttpRequest
-            HttpRequest httpRequest = request.toHttpRequest();
-
             // Execute based on configuration
             if (config.isParallel()) {
-                executeParallel(run, httpRequest, config, listener);
+                executeParallel(run, request, config, listener);
             } else {
-                executeSequential(run, httpRequest, config, listener);
+                executeSequential(run, request, config, listener);
             }
 
             // After execution: determine final status
@@ -154,25 +152,30 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
 
     /**
      * Executes iterations sequentially with optional delay between them.
-     *
-     * @param run         the ExecutionRun being processed
-     * @param httpRequest the HTTP request to send each iteration
-     * @param config      the execution configuration
-     * @param listener    the progress listener for notifications
+     * Supports data-driven execution where each iteration uses a different data row.
      */
-    private void executeSequential(ExecutionRun run, HttpRequest httpRequest,
+    private void executeSequential(ExecutionRun run, ParsedRequest request,
                                     ExecutionConfig config, ExecutionProgressListener listener) {
-        for (int i = 1; i <= config.getIterations(); i++) {
+        int totalIterations = config.getEffectiveIterations();
+
+        for (int i = 1; i <= totalIterations; i++) {
             if (isCancelled(run.getId())) {
                 break;
             }
 
+            // Build HttpRequest for this iteration (with or without data)
+            java.util.Map<String, Object> dataRow = null;
+            if (config.isDataDriven()) {
+                dataRow = config.getDataList().get(i - 1);
+            }
+            HttpRequest httpRequest = request.toHttpRequest(dataRow);
+
             RequestResult result = executeIteration(run.getId(), i, httpRequest);
             requestResultRepository.save(result);
             listener.onIterationComplete(result);
-            listener.onProgress(i, config.getIterations());
+            listener.onProgress(i, totalIterations);
 
-            if (i < config.getIterations() && config.getDelayMs() > 0) {
+            if (i < totalIterations && config.getDelayMs() > 0) {
                 try {
                     Thread.sleep(config.getDelayMs());
                 } catch (InterruptedException e) {
@@ -185,28 +188,23 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
 
     /**
      * Executes iterations in parallel using a fixed thread pool with CompletableFuture.
-     * The thread pool size is limited to the minimum of the number of iterations and
-     * the available processors. Delay is applied as a staggered offset between submissions.
-     * Results are collected, saved to the database, and progress is notified via the listener.
-     * Supports cancellation via the cancellationFlags map.
-     *
-     * @param run         the ExecutionRun being processed
-     * @param httpRequest the HTTP request to send each iteration
-     * @param config      the execution configuration
-     * @param listener    the progress listener for notifications
+     * Supports data-driven execution where each iteration uses a different data row.
      */
-    private void executeParallel(ExecutionRun run, HttpRequest httpRequest,
+    private void executeParallel(ExecutionRun run, ParsedRequest request,
                                   ExecutionConfig config, ExecutionProgressListener listener) {
-        int poolSize = Math.min(config.getIterations(), Runtime.getRuntime().availableProcessors());
+        int totalIterations = config.getEffectiveIterations();
+        int poolSize = Math.min(totalIterations, Runtime.getRuntime().availableProcessors());
         ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
         try {
             List<CompletableFuture<RequestResult>> futures = new ArrayList<>();
             AtomicInteger completedCount = new AtomicInteger(0);
 
-            for (int i = 1; i <= config.getIterations(); i++) {
+            for (int i = 1; i <= totalIterations; i++) {
                 final int iteration = i;
                 final long delayOffset = (long) (i - 1) * config.getDelayMs();
+                final java.util.Map<String, Object> dataRow = config.isDataDriven()
+                        ? config.getDataList().get(i - 1) : null;
 
                 CompletableFuture<RequestResult> future = CompletableFuture.supplyAsync(() -> {
                     if (isCancelled(run.getId())) {
@@ -226,11 +224,12 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
                         return null;
                     }
 
+                    HttpRequest httpRequest = request.toHttpRequest(dataRow);
                     RequestResult result = executeIteration(run.getId(), iteration, httpRequest);
 
                     int completed = completedCount.incrementAndGet();
                     listener.onIterationComplete(result);
-                    listener.onProgress(completed, config.getIterations());
+                    listener.onProgress(completed, totalIterations);
 
                     return result;
                 }, executor);
@@ -279,6 +278,7 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
             result.setResponseTimeMs(elapsedMs);
             result.setResponseSizeBytes(response.body().getBytes().length);
             result.setSuccess(response.statusCode() < 400);
+            result.setResponseBody(response.body());
 
         } catch (Exception e) {
             long elapsedMs = (System.nanoTime() - startTime) / 1_000_000;

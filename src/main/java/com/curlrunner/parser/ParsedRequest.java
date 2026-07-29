@@ -74,8 +74,22 @@ public class ParsedRequest {
      * @return a configured HttpRequest ready to be sent
      */
     public HttpRequest toHttpRequest() {
+        return toHttpRequest(null);
+    }
+
+    /**
+     * Builds a java.net.http.HttpRequest from this ParsedRequest, resolving
+     * {{variable}} placeholders using the provided data map.
+     *
+     * @param data the data map for variable resolution (can be null for no substitution)
+     * @return a configured HttpRequest ready to be sent
+     */
+    public HttpRequest toHttpRequest(Map<String, Object> data) {
+        String resolvedUrl = resolveValue(this.url, data);
+        String resolvedBody = resolveValue(this.body, data);
+
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(this.url));
+                .uri(URI.create(resolvedUrl));
 
         // Set HTTP method with appropriate body publisher
         String upperMethod = this.method.toUpperCase();
@@ -88,8 +102,8 @@ public class ParsedRequest {
             case "POST":
             case "PUT":
             case "PATCH":
-                if (this.body != null) {
-                    builder.method(upperMethod, BodyPublishers.ofString(this.body));
+                if (resolvedBody != null) {
+                    builder.method(upperMethod, BodyPublishers.ofString(resolvedBody));
                 } else {
                     builder.method(upperMethod, BodyPublishers.noBody());
                 }
@@ -99,17 +113,25 @@ public class ParsedRequest {
                 break;
         }
 
-        // Add all headers
+        // Add all headers (with variable resolution)
         for (Map.Entry<String, String> entry : this.headers.entrySet()) {
-            builder.header(entry.getKey(), entry.getValue());
+            String resolvedHeaderValue = resolveValue(entry.getValue(), data);
+            builder.header(entry.getKey(), resolvedHeaderValue);
         }
 
         // Add Basic Auth header if credentials are set
         if (this.basicAuth != null) {
-            String encoded = Base64.getEncoder().encodeToString(this.basicAuth.getBytes());
+            String resolvedAuth = resolveValue(this.basicAuth, data);
+            String encoded = Base64.getEncoder().encodeToString(resolvedAuth.getBytes());
             builder.header("Authorization", "Basic " + encoded);
         }
 
         return builder.build();
+    }
+
+    private String resolveValue(String value, Map<String, Object> data) {
+        if (value == null) return null;
+        if (data == null || data.isEmpty()) return value;
+        return VariableResolverService.resolve(value, data);
     }
 }

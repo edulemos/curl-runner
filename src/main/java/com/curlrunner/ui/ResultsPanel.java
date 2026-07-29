@@ -1,8 +1,9 @@
 package com.curlrunner.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
 import java.awt.GridLayout;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -10,7 +11,11 @@ import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.ListSelectionModel;
+import javax.swing.event.ListSelectionEvent;
 import javax.swing.table.DefaultTableModel;
 
 import org.springframework.stereotype.Component;
@@ -21,15 +26,13 @@ import com.curlrunner.model.RequestResult;
 /**
  * Panel that displays execution results in two sections:
  * - Summary panel (top): aggregated metrics
- * - Results table (center): individual request results in a JTable
+ * - Results table + response viewer (center): split pane
  */
 @Component
 public class ResultsPanel extends JPanel {
 
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-
     private static final String[] COLUMN_NAMES = {
-        "#", "Status Code", "Response Time (ms)", "Success", "Error", "Size (bytes)", "Executed At"
+        "#", "Status Code", "Response Time (ms)", "Response"
     };
 
     // Summary labels
@@ -49,16 +52,22 @@ public class ResultsPanel extends JPanel {
     private final DefaultTableModel tableModel;
     private final JTable resultsTable;
 
+    // Response body viewer
+    private final JTextArea responseViewer;
+
+    // Store results for response body access
+    private List<RequestResult> currentResults;
+
     public ResultsPanel() {
         setLayout(new BorderLayout());
 
         // Summary panel
         JPanel summaryPanel = new JPanel(new GridLayout(4, 3, 10, 5));
-        summaryPanel.setBorder(BorderFactory.createTitledBorder("Resumo"));
+        summaryPanel.setBorder(BorderFactory.createTitledBorder("Summary"));
 
         totalRequestsLabel = new JLabel("Total: -");
-        successCountLabel = new JLabel("Sucesso: -");
-        failureCountLabel = new JLabel("Falha: -");
+        successCountLabel = new JLabel("Success: -");
+        failureCountLabel = new JLabel("Failure: -");
         avgResponseTimeLabel = new JLabel("Avg: - ms");
         minResponseTimeLabel = new JLabel("Min: - ms");
         maxResponseTimeLabel = new JLabel("Max: - ms");
@@ -90,23 +99,75 @@ public class ResultsPanel extends JPanel {
             }
         };
         resultsTable = new JTable(tableModel);
+        resultsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        resultsTable.getSelectionModel().addListSelectionListener(this::onRowSelected);
         JScrollPane tableScrollPane = new JScrollPane(resultsTable);
 
+        // Response body viewer — dark theme, monospaced, read-only
+        responseViewer = new JTextArea();
+        responseViewer.setEditable(false);
+        responseViewer.setFont(new Font("Consolas", Font.PLAIN, 12));
+        responseViewer.setBackground(new Color(40, 40, 40));
+        responseViewer.setForeground(new Color(200, 220, 200));
+        responseViewer.setCaretColor(Color.WHITE);
+        responseViewer.setLineWrap(true);
+        responseViewer.setWrapStyleWord(true);
+        responseViewer.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+        responseViewer.setText("Select a row to view the full response");
+        JScrollPane responseScrollPane = new JScrollPane(responseViewer);
+        responseScrollPane.setBorder(BorderFactory.createTitledBorder("Response Body"));
+
+        // Split pane: table on top, response viewer on bottom
+        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tableScrollPane, responseScrollPane);
+        splitPane.setResizeWeight(0.5);
+        splitPane.setDividerLocation(200);
+
         add(summaryPanel, BorderLayout.NORTH);
-        add(tableScrollPane, BorderLayout.CENTER);
+        add(splitPane, BorderLayout.CENTER);
+    }
+
+    private void onRowSelected(ListSelectionEvent e) {
+        if (e.getValueIsAdjusting()) return;
+
+        int selectedRow = resultsTable.getSelectedRow();
+        if (selectedRow >= 0 && currentResults != null && selectedRow < currentResults.size()) {
+            RequestResult result = currentResults.get(selectedRow);
+            String body = result.getResponseBody();
+            if (body != null && !body.isEmpty()) {
+                responseViewer.setText(formatJson(body));
+                responseViewer.setCaretPosition(0);
+            } else if (result.getErrorMessage() != null) {
+                responseViewer.setText("ERROR: " + result.getErrorMessage());
+            } else {
+                responseViewer.setText("(no content)");
+            }
+        }
+    }
+
+    /**
+     * Attempts to pretty-print JSON content. If it fails, returns as-is.
+     */
+    private String formatJson(String json) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Object parsed = mapper.readValue(json, Object.class);
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(parsed);
+        } catch (Exception e) {
+            // Not JSON or malformed — return raw content
+            return json;
+        }
     }
 
     /**
      * Populates both summary labels and table rows with execution results.
-     *
-     * @param results the aggregated results to display in the summary
-     * @param individualResults the list of individual request results for the table
      */
     public void displayResults(AggregatedResults results, List<RequestResult> individualResults) {
+        this.currentResults = individualResults;
+
         // Update summary labels
         totalRequestsLabel.setText("Total: " + results.getTotalRequests());
-        successCountLabel.setText("Sucesso: " + results.getSuccessCount());
-        failureCountLabel.setText("Falha: " + results.getFailureCount());
+        successCountLabel.setText("Success: " + results.getSuccessCount());
+        failureCountLabel.setText("Failure: " + results.getFailureCount());
         avgResponseTimeLabel.setText("Avg: " + results.getAvgResponseTimeMs() + " ms");
         minResponseTimeLabel.setText("Min: " + results.getMinResponseTimeMs() + " ms");
         maxResponseTimeLabel.setText("Max: " + results.getMaxResponseTimeMs() + " ms");
@@ -119,27 +180,35 @@ public class ResultsPanel extends JPanel {
         // Populate table
         tableModel.setRowCount(0);
         for (RequestResult result : individualResults) {
+            String responsePreview = "";
+            if (result.getResponseBody() != null) {
+                responsePreview = result.getResponseBody().length() > 80
+                    ? result.getResponseBody().substring(0, 80) + "..."
+                    : result.getResponseBody();
+            }
+
             Object[] row = {
                 result.getIterationNumber(),
                 result.getStatusCode() != null ? result.getStatusCode() : "-",
                 result.getResponseTimeMs(),
-                result.getSuccess() != null && result.getSuccess() ? "Yes" : "No",
-                result.getErrorMessage() != null ? result.getErrorMessage() : "",
-                result.getResponseSizeBytes() != null ? result.getResponseSizeBytes() : "-",
-                result.getExecutedAt() != null ? result.getExecutedAt().format(DATE_FORMATTER) : "-"
+                responsePreview
             };
             tableModel.addRow(row);
         }
+
+        responseViewer.setText("Select a row to view the full response");
     }
 
     /**
      * Clears the table and resets summary labels to default values.
      */
     public void clear() {
+        currentResults = null;
         tableModel.setRowCount(0);
+        responseViewer.setText("Select a row to view the full response");
         totalRequestsLabel.setText("Total: -");
-        successCountLabel.setText("Sucesso: -");
-        failureCountLabel.setText("Falha: -");
+        successCountLabel.setText("Success: -");
+        failureCountLabel.setText("Failure: -");
         avgResponseTimeLabel.setText("Avg: - ms");
         minResponseTimeLabel.setText("Min: - ms");
         maxResponseTimeLabel.setText("Max: - ms");

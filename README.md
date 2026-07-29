@@ -1,64 +1,108 @@
 # Curl Runner
 
-Aplicação desktop para executar comandos cURL de forma repetida e controlada, similar ao Collection Runner do Postman e Bruno.
+A desktop application to execute cURL commands repeatedly with control over iterations, delay, and parallelism. Similar to Postman's Collection Runner and Bruno's Runner.
 
-## Para que serve?
+## What is it for?
 
-O Curl Runner permite testar endpoints HTTP executando o mesmo comando cURL múltiplas vezes, com controle sobre:
+Curl Runner lets you stress-test or batch-test HTTP endpoints by executing the same cURL command multiple times, with control over:
 
-- **Número de iterações** — quantas vezes a requisição será executada (1 a 10.000)
-- **Delay entre requisições** — intervalo em milissegundos entre cada execução (0 a 60.000ms)
-- **Modo paralelo ou sequencial** — execute uma por vez ou todas simultaneamente
+- **Number of iterations** — how many times the request will be executed (1 to 10,000)
+- **Delay between requests** — interval in milliseconds between each execution (0 to 60,000ms)
+- **Parallel or sequential mode** — execute one at a time or all simultaneously
 
-Ao final, a aplicação exibe um resumo completo com métricas de performance: tempo médio de resposta, percentis (P50, P95, P99), taxa de requisições por segundo, distribuição de status codes e contagem de sucessos/falhas.
+After execution, the application displays a full summary with performance metrics: average response time, percentiles (P50, P95, P99), requests per second, status code distribution, and success/failure counts.
 
-## Como usar
+## How to use
 
-1. **Cole seu comando cURL** no campo de texto da aplicação
-2. **Configure a execução**:
-   - Defina o número de iterações desejado
-   - Defina o delay entre requisições (0 para sem pausa)
-   - Marque "Paralelo" se quiser execução simultânea
-3. **Clique em "Executar"**
-4. **Acompanhe o progresso** pela barra de progresso
-5. **Analise os resultados** no painel de resumo e na tabela de resultados individuais
+1. **Paste your cURL command** in the text area
+2. **Configure the execution**:
+   - Set the number of iterations
+   - Set the delay between requests (0 for no pause)
+   - Check "Parallel" for simultaneous execution
+3. **Click "Run"**
+4. **Monitor progress** via the progress bar
+5. **Analyze results** in the summary panel and results table
+6. **Click on a row** to view the full response body (formatted as JSON when applicable)
 
-Para cancelar uma execução em andamento, clique em "Cancelar".
+To cancel a running execution, click "Cancel".
 
-## Exemplo de comando cURL
+## Data-Driven Execution (JSON Variables)
 
+You can load a JSON file with a list of data objects and use `{{variable}}` placeholders in the cURL command. Each item in the list generates one execution with the corresponding values substituted.
+
+### Example
+
+cURL command:
 ```
-curl --request POST --url https://api.exemplo.com/dados --header 'Content-Type: application/json' --data '{"chave": "valor"}'
+curl --request POST --url https://api.example.com/users --header 'Content-Type: application/json' --data '{"name": "{{name}}", "email": "{{email}}"}'
 ```
 
-Comandos copiados de navegadores ou ferramentas com `\` de continuação de linha também são aceitos.
+JSON file (`data.json`):
+```json
+[
+  {"name": "Carlos", "email": "carlos@email.com"},
+  {"name": "Daniel", "email": "daniel@email.com"},
+  {"name": "Maria", "email": "maria@email.com"}
+]
+```
 
-## Formatos suportados
+**Result:** 3 executions, each replacing `{{name}}` and `{{email}}` with the corresponding values from each object.
 
-- `-X` / `--request` — método HTTP (GET, POST, PUT, DELETE, PATCH)
-- `--url` — URL alvo
-- `-H` / `--header` — headers da requisição
-- `-d` / `--data` / `--data-raw` — corpo da requisição
-- `-u` / `--user` — autenticação básica (usuario:senha)
-- URLs sem flag (passadas diretamente após `curl`)
+### How to use data-driven mode
 
-## Executando a aplicação
+1. Write the cURL command using `{{variable}}` placeholders where you want dynamic data
+2. Click **"Load JSON"** and select your data file
+3. The number of iterations will be automatically set to the list size
+4. Click **"Run"**
 
-Requisitos: Java 17 ou superior.
+To go back to manual iteration mode, click **"Clear"**.
+
+### JSON file format
+
+The file must contain a JSON array of objects:
+
+```json
+[
+  {"field1": "value1", "field2": 123},
+  {"field1": "value2", "field2": 456}
+]
+```
+
+Variables can be used in:
+- URL (`--url https://api.example.com/{{path}}`)
+- Request body (`--data '{"key": "{{value}}"}'`)
+- Headers (`--header 'Authorization: Bearer {{token}}'`)
+- Basic auth (`-u {{user}}:{{pass}}`)
+
+## Supported cURL flags
+
+- `-X` / `--request` — HTTP method (GET, POST, PUT, DELETE, PATCH)
+- `--url` — target URL
+- `-H` / `--header` — request headers
+- `-d` / `--data` / `--data-raw` — request body
+- `-u` / `--user` — basic authentication (user:password)
+- Bare URLs (passed directly after `curl`)
+
+Commands copied from browsers or tools with `\` line continuations are also supported.
+
+## Running the application
+
+Requirements: Java 17 or higher.
 
 ```bash
 mvn spring-boot:run
 ```
 
-Ou gere o JAR e execute:
+Or build the JAR and run it:
 
 ```bash
 mvn clean package -DskipTests
 java -jar target/curl-runner-0.0.1-SNAPSHOT.jar
 ```
 
-## Observações
+## Notes
 
-- Os dados de execução ficam apenas em memória durante a sessão. Ao fechar a aplicação, o histórico é perdido.
-- Comandos com caracteres de injeção de shell (pipes, redirecionamentos, backticks) são rejeitados por segurança.
-- Em modo paralelo, o número de threads é limitado ao número de processadores disponíveis na máquina.
+- Execution data is stored in-memory only. When the application is closed, all history is lost.
+- Commands containing shell injection characters (pipes, redirections, backticks) are rejected for security.
+- In parallel mode, the thread pool is limited to the number of available processors.
+- The response body is stored for each iteration and can be viewed by selecting a row in the results table.

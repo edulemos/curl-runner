@@ -36,6 +36,12 @@
             <artifactId>spring-boot-starter-data-jdbc</artifactId>
         </dependency>
 
+        <!-- Jackson for JSON parsing (data-driven execution) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
         <!-- H2 Database (in-memory, runtime only) -->
         <dependency>
             <groupId>com.h2database</groupId>

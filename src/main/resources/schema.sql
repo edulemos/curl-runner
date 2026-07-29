@@ -22,5 +22,6 @@ CREATE TABLE request_result (
     error_message TEXT,
     response_size_bytes INT,
     executed_at TIMESTAMP NOT NULL,
+    response_body CLOB,
     FOREIGN KEY (run_id) REFERENCES execution_run(id)
 );
