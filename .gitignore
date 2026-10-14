@@ -18,6 +18,7 @@ Thumbs.db
 
 # Batch scripts
 *.bat
+!run-curl-runner.bat
 
 # Maven wrapper (if added later)
 .mvn/

@@ -98,8 +98,10 @@ Or build the JAR and run it:
 
 ```bash
 mvn clean package -DskipTests
-java -jar target/curl-runner-0.1.0.jar
+java -jar target/curl-runner-1.0.0.jar
 ```
+
+On Windows, if double-clicking the `.jar` displays a Java error, run it from a terminal with the command above or use `run-curl-runner.bat` from the release. Keep the `.bat` file in the same folder as the downloaded JAR.
 
 ## Notes
 
