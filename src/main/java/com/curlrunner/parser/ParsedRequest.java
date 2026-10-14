@@ -85,14 +85,13 @@ public class ParsedRequest {
      * @return a configured HttpRequest ready to be sent
      */
     public HttpRequest toHttpRequest(Map<String, Object> data) {
-        String resolvedUrl = resolveValue(this.url, data);
-        String resolvedBody = resolveValue(this.body, data);
+        ResolvedRequest resolvedRequest = resolve(data);
 
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(resolvedUrl));
+                .uri(URI.create(resolvedRequest.url()));
 
         // Set HTTP method with appropriate body publisher
-        String upperMethod = this.method.toUpperCase();
+        String upperMethod = resolvedRequest.method();
         switch (upperMethod) {
             case "GET":
             case "DELETE":
@@ -102,8 +101,8 @@ public class ParsedRequest {
             case "POST":
             case "PUT":
             case "PATCH":
-                if (resolvedBody != null) {
-                    builder.method(upperMethod, BodyPublishers.ofString(resolvedBody));
+                if (resolvedRequest.body() != null) {
+                    builder.method(upperMethod, BodyPublishers.ofString(resolvedRequest.body()));
                 } else {
                     builder.method(upperMethod, BodyPublishers.noBody());
                 }
@@ -114,19 +113,33 @@ public class ParsedRequest {
         }
 
         // Add all headers (with variable resolution)
-        for (Map.Entry<String, String> entry : this.headers.entrySet()) {
-            String resolvedHeaderValue = resolveValue(entry.getValue(), data);
-            builder.header(entry.getKey(), resolvedHeaderValue);
-        }
-
-        // Add Basic Auth header if credentials are set
-        if (this.basicAuth != null) {
-            String resolvedAuth = resolveValue(this.basicAuth, data);
-            String encoded = Base64.getEncoder().encodeToString(resolvedAuth.getBytes());
-            builder.header("Authorization", "Basic " + encoded);
+        for (Map.Entry<String, String> entry : resolvedRequest.headers().entrySet()) {
+            builder.header(entry.getKey(), entry.getValue());
         }
 
         return builder.build();
+    }
+
+    /** Resolves the values used in one iteration, including data-driven variables. */
+    public ResolvedRequest resolve(Map<String, Object> data) {
+        Map<String, String> resolvedHeaders = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : this.headers.entrySet()) {
+            resolvedHeaders.put(entry.getKey(), resolveValue(entry.getValue(), data));
+        }
+        if (this.basicAuth != null) {
+            String resolvedAuth = resolveValue(this.basicAuth, data);
+            String encoded = Base64.getEncoder().encodeToString(resolvedAuth.getBytes());
+            resolvedHeaders.put("Authorization", "Basic " + encoded);
+        }
+        return new ResolvedRequest(
+            this.method.toUpperCase(),
+            resolveValue(this.url, data),
+            resolvedHeaders,
+            resolveValue(this.body, data)
+        );
+    }
+
+    public record ResolvedRequest(String method, String url, Map<String, String> headers, String body) {
     }
 
     private String resolveValue(String value, Map<String, Object> data) {

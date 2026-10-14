@@ -5,7 +5,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.util.List;
-import java.util.Map;
 
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
@@ -32,7 +31,7 @@ import com.curlrunner.model.RequestResult;
 public class ResultsPanel extends JPanel {
 
     private static final String[] COLUMN_NAMES = {
-        "#", "Status Code", "Response Time (ms)", "Response"
+        "#", "Status Code", "Response Time (ms)", "Request", "Response"
     };
 
     // Summary labels
@@ -42,12 +41,6 @@ public class ResultsPanel extends JPanel {
     private final JLabel avgResponseTimeLabel;
     private final JLabel minResponseTimeLabel;
     private final JLabel maxResponseTimeLabel;
-    private final JLabel p50Label;
-    private final JLabel p95Label;
-    private final JLabel p99Label;
-    private final JLabel requestsPerSecondLabel;
-    private final JLabel statusCodeDistributionLabel;
-
     // Results table
     private final DefaultTableModel tableModel;
     private final JTable resultsTable;
@@ -62,7 +55,7 @@ public class ResultsPanel extends JPanel {
         setLayout(new BorderLayout());
 
         // Summary panel
-        JPanel summaryPanel = new JPanel(new GridLayout(4, 3, 10, 5));
+        JPanel summaryPanel = new JPanel(new GridLayout(2, 3, 10, 5));
         summaryPanel.setBorder(BorderFactory.createTitledBorder("Summary"));
 
         totalRequestsLabel = new JLabel("Total: -");
@@ -71,12 +64,6 @@ public class ResultsPanel extends JPanel {
         avgResponseTimeLabel = new JLabel("Avg: - ms");
         minResponseTimeLabel = new JLabel("Min: - ms");
         maxResponseTimeLabel = new JLabel("Max: - ms");
-        p50Label = new JLabel("P50: - ms");
-        p95Label = new JLabel("P95: - ms");
-        p99Label = new JLabel("P99: - ms");
-        requestsPerSecondLabel = new JLabel("Req/s: -");
-        statusCodeDistributionLabel = new JLabel("Status Codes: -");
-        JLabel emptyLabel = new JLabel("");
 
         summaryPanel.add(totalRequestsLabel);
         summaryPanel.add(successCountLabel);
@@ -84,12 +71,6 @@ public class ResultsPanel extends JPanel {
         summaryPanel.add(avgResponseTimeLabel);
         summaryPanel.add(minResponseTimeLabel);
         summaryPanel.add(maxResponseTimeLabel);
-        summaryPanel.add(p50Label);
-        summaryPanel.add(p95Label);
-        summaryPanel.add(p99Label);
-        summaryPanel.add(requestsPerSecondLabel);
-        summaryPanel.add(statusCodeDistributionLabel);
-        summaryPanel.add(emptyLabel);
 
         // Results table
         tableModel = new DefaultTableModel(COLUMN_NAMES, 0) {
@@ -100,8 +81,11 @@ public class ResultsPanel extends JPanel {
         };
         resultsTable = new JTable(tableModel);
         resultsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        resultsTable.setColumnSelectionAllowed(true);
         resultsTable.getSelectionModel().addListSelectionListener(this::onRowSelected);
+        resultsTable.getColumnModel().getSelectionModel().addListSelectionListener(this::onRowSelected);
         JScrollPane tableScrollPane = new JScrollPane(resultsTable);
+
 
         // Response body viewer — dark theme, monospaced, read-only
         responseViewer = new JTextArea();
@@ -113,9 +97,9 @@ public class ResultsPanel extends JPanel {
         responseViewer.setLineWrap(true);
         responseViewer.setWrapStyleWord(true);
         responseViewer.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        responseViewer.setText("Select a row to view the full response");
+        responseViewer.setText("Select a request or response to view its full content");
         JScrollPane responseScrollPane = new JScrollPane(responseViewer);
-        responseScrollPane.setBorder(BorderFactory.createTitledBorder("Response Body"));
+        responseScrollPane.setBorder(BorderFactory.createTitledBorder("Request / Response Body"));
 
         // Split pane: table on top, response viewer on bottom
         JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tableScrollPane, responseScrollPane);
@@ -130,8 +114,14 @@ public class ResultsPanel extends JPanel {
         if (e.getValueIsAdjusting()) return;
 
         int selectedRow = resultsTable.getSelectedRow();
+        int selectedColumn = resultsTable.getSelectedColumn();
         if (selectedRow >= 0 && currentResults != null && selectedRow < currentResults.size()) {
             RequestResult result = currentResults.get(selectedRow);
+            if (selectedColumn == 3) {
+                responseViewer.setText(formatRequest(result));
+                responseViewer.setCaretPosition(0);
+                return;
+            }
             String body = result.getResponseBody();
             if (body != null && !body.isEmpty()) {
                 responseViewer.setText(formatJson(body));
@@ -142,6 +132,21 @@ public class ResultsPanel extends JPanel {
                 responseViewer.setText("(no content)");
             }
         }
+    }
+
+    private String formatRequest(RequestResult result) {
+        StringBuilder request = new StringBuilder();
+        request.append(result.getRequestMethod() != null ? result.getRequestMethod() : "REQUEST");
+        if (result.getRequestUrl() != null) {
+            request.append(" ").append(result.getRequestUrl());
+        }
+        if (result.getRequestHeaders() != null && !result.getRequestHeaders().isBlank()) {
+            request.append("\n\nHeaders:\n").append(formatJson(result.getRequestHeaders()));
+        }
+        if (result.getRequestBody() != null && !result.getRequestBody().isBlank()) {
+            request.append("\n\nBody:\n").append(formatJson(result.getRequestBody()));
+        }
+        return request.toString();
     }
 
     /**
@@ -171,15 +176,11 @@ public class ResultsPanel extends JPanel {
         avgResponseTimeLabel.setText("Avg: " + results.getAvgResponseTimeMs() + " ms");
         minResponseTimeLabel.setText("Min: " + results.getMinResponseTimeMs() + " ms");
         maxResponseTimeLabel.setText("Max: " + results.getMaxResponseTimeMs() + " ms");
-        p50Label.setText("P50: " + results.getP50ResponseTimeMs() + " ms");
-        p95Label.setText("P95: " + results.getP95ResponseTimeMs() + " ms");
-        p99Label.setText("P99: " + results.getP99ResponseTimeMs() + " ms");
-        requestsPerSecondLabel.setText(String.format("Req/s: %.2f", results.getRequestsPerSecond()));
-        statusCodeDistributionLabel.setText("Status Codes: " + formatStatusCodeDistribution(results.getStatusCodeDistribution()));
 
         // Populate table
         tableModel.setRowCount(0);
         for (RequestResult result : individualResults) {
+            String requestPreview = buildRequestPreview(result);
             String responsePreview = "";
             if (result.getResponseBody() != null) {
                 responsePreview = result.getResponseBody().length() > 80
@@ -191,12 +192,22 @@ public class ResultsPanel extends JPanel {
                 result.getIterationNumber(),
                 result.getStatusCode() != null ? result.getStatusCode() : "-",
                 result.getResponseTimeMs(),
+                requestPreview,
                 responsePreview
             };
             tableModel.addRow(row);
         }
 
-        responseViewer.setText("Select a row to view the full response");
+        responseViewer.setText("Select a request or response to view its full content");
+    }
+
+    private String buildRequestPreview(RequestResult result) {
+        String preview = result.getRequestBody();
+        if (preview == null || preview.isBlank()) {
+            preview = (result.getRequestMethod() != null ? result.getRequestMethod() + " " : "")
+                + (result.getRequestUrl() != null ? result.getRequestUrl() : "");
+        }
+        return preview.length() > 80 ? preview.substring(0, 80) + "..." : preview;
     }
 
     /**
@@ -205,33 +216,13 @@ public class ResultsPanel extends JPanel {
     public void clear() {
         currentResults = null;
         tableModel.setRowCount(0);
-        responseViewer.setText("Select a row to view the full response");
+        responseViewer.setText("Select a request or response to view its full content");
         totalRequestsLabel.setText("Total: -");
         successCountLabel.setText("Success: -");
         failureCountLabel.setText("Failure: -");
         avgResponseTimeLabel.setText("Avg: - ms");
         minResponseTimeLabel.setText("Min: - ms");
         maxResponseTimeLabel.setText("Max: - ms");
-        p50Label.setText("P50: - ms");
-        p95Label.setText("P95: - ms");
-        p99Label.setText("P99: - ms");
-        requestsPerSecondLabel.setText("Req/s: -");
-        statusCodeDistributionLabel.setText("Status Codes: -");
     }
 
-    private String formatStatusCodeDistribution(Map<Integer, Integer> distribution) {
-        if (distribution == null || distribution.isEmpty()) {
-            return "-";
-        }
-        StringBuilder sb = new StringBuilder();
-        distribution.entrySet().stream()
-            .sorted(Map.Entry.comparingByKey())
-            .forEach(entry -> {
-                if (sb.length() > 0) {
-                    sb.append(", ");
-                }
-                sb.append(entry.getKey()).append("=").append(entry.getValue());
-            });
-        return sb.toString();
-    }
 }

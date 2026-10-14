@@ -23,6 +23,7 @@ After execution, the application displays a full summary with performance metric
 4. **Monitor progress** via the progress bar
 5. **Analyze results** in the summary panel and results table
 6. **Click on a row** to view the full response body (formatted as JSON when applicable)
+7. **Click "Export results"** to save the completed execution as a minified JSON file. For every iteration, it contains the request actually sent (method, URL, headers, and body), response, HTTP status, and elapsed time. JSON request and response bodies are exported as JSON objects rather than escaped text.
 
 To cancel a running execution, click "Cancel".
 
@@ -97,7 +98,7 @@ Or build the JAR and run it:
 
 ```bash
 mvn clean package -DskipTests
-java -jar target/curl-runner-0.0.1-SNAPSHOT.jar
+java -jar target/curl-runner-0.1.0.jar
 ```
 
 ## Notes

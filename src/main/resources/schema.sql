@@ -23,5 +23,9 @@ CREATE TABLE request_result (
     response_size_bytes INT,
     executed_at TIMESTAMP NOT NULL,
     response_body CLOB,
+    request_method VARCHAR(20),
+    request_url TEXT,
+    request_headers CLOB,
+    request_body CLOB,
     FOREIGN KEY (run_id) REFERENCES execution_run(id)
 );

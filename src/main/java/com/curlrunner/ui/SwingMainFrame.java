@@ -2,6 +2,9 @@ package com.curlrunner.ui;
 
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
+import java.awt.Rectangle;
+import java.awt.GraphicsEnvironment;
+import java.io.File;
 import java.util.List;
 
 import javax.swing.JButton;
@@ -10,6 +13,8 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.springframework.stereotype.Component;
 
@@ -17,6 +22,7 @@ import com.curlrunner.engine.AggregatedResults;
 import com.curlrunner.engine.ExecutionConfig;
 import com.curlrunner.engine.ExecutionEngineService;
 import com.curlrunner.engine.ResultsAggregatorService;
+import com.curlrunner.engine.ResultsExportService;
 import com.curlrunner.model.ExecutionRun;
 import com.curlrunner.model.RequestResult;
 import com.curlrunner.parser.CurlParseException;
@@ -44,13 +50,17 @@ public class SwingMainFrame extends JFrame {
     private final ResultsAggregatorService resultsAggregatorService;
     private final ResultsPanel resultsPanel;
     private final RequestResultRepository requestResultRepository;
+    private final ResultsExportService resultsExportService;
+    private AggregatedResults completedResults;
+    private List<RequestResult> completedIndividualResults;
 
     public SwingMainFrame(InputPanel inputPanel,
                           CurlParserService curlParserService,
                           ExecutionEngineService executionEngineService,
                           ResultsAggregatorService resultsAggregatorService,
                           ResultsPanel resultsPanel,
-                          RequestResultRepository requestResultRepository) {
+                          RequestResultRepository requestResultRepository,
+                          ResultsExportService resultsExportService) {
         super("Curl Runner");
         this.inputPanel = inputPanel;
         this.curlParserService = curlParserService;
@@ -58,6 +68,7 @@ public class SwingMainFrame extends JFrame {
         this.resultsAggregatorService = resultsAggregatorService;
         this.resultsPanel = resultsPanel;
         this.requestResultRepository = requestResultRepository;
+        this.resultsExportService = resultsExportService;
     }
 
     /**
@@ -66,7 +77,12 @@ public class SwingMainFrame extends JFrame {
      */
     public void initialize() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(900, 700);
+        Rectangle availableScreen = GraphicsEnvironment.getLocalGraphicsEnvironment()
+            .getMaximumWindowBounds();
+        setSize(
+            (int) Math.round(availableScreen.width * 0.75),
+            (int) Math.round(availableScreen.height * 0.75)
+        );
         setLayout(new BorderLayout());
 
         // Top section: Input panel (includes buttons)
@@ -96,6 +112,7 @@ public class SwingMainFrame extends JFrame {
                 executionEngineService.cancel(currentRunId);
             }
         });
+        inputPanel.getExportButton().addActionListener(e -> exportCompletedResults());
 
         setLocationRelativeTo(null);
         setVisible(true);
@@ -154,6 +171,9 @@ public class SwingMainFrame extends JFrame {
         // 5. Set UI state to RUNNING
         setExecutionState(ExecutionState.RUNNING);
         resultsPanel.clear();
+        completedResults = null;
+        completedIndividualResults = null;
+        inputPanel.getExportButton().setEnabled(false);
 
         // 6. Execute in a background thread (NOT the EDT)
         SwingProgressListener progressListener = new SwingProgressListener(this);
@@ -170,6 +190,9 @@ public class SwingMainFrame extends JFrame {
 
                 SwingUtilities.invokeLater(() -> {
                     currentRunId = null;
+                    completedResults = aggregatedResults;
+                    completedIndividualResults = individualResults;
+                    inputPanel.getExportButton().setEnabled(true);
                     resultsPanel.displayResults(aggregatedResults, individualResults);
                     setExecutionState(ExecutionState.COMPLETED);
                 });
@@ -222,7 +245,43 @@ public class SwingMainFrame extends JFrame {
      * @param individualResults the individual request results for the table
      */
     public void displayResults(AggregatedResults results, List<RequestResult> individualResults) {
+        completedResults = results;
+        completedIndividualResults = individualResults;
+        inputPanel.getExportButton().setEnabled(true);
         resultsPanel.displayResults(results, individualResults);
+    }
+
+    private void exportCompletedResults() {
+        if (completedResults == null || completedIndividualResults == null) {
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save execution results");
+        fileChooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
+        fileChooser.setSelectedFile(new File("curl-runner-results.json"));
+
+        if (fileChooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File selectedFile = fileChooser.getSelectedFile();
+        if (!selectedFile.getName().toLowerCase().endsWith(".json")) {
+            selectedFile = new File(selectedFile.getParentFile(), selectedFile.getName() + ".json");
+        }
+
+        try {
+            resultsExportService.export(selectedFile.toPath(), completedResults, completedIndividualResults);
+            JOptionPane.showMessageDialog(this,
+                "Results exported to:\n" + selectedFile.getAbsolutePath(),
+                "Export complete",
+                JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                "Could not export results: " + ex.getMessage(),
+                "Export error",
+                JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**

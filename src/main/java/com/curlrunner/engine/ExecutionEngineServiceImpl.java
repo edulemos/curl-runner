@@ -21,6 +21,8 @@ import com.curlrunner.model.RequestResult;
 import com.curlrunner.parser.ParsedRequest;
 import com.curlrunner.repository.ExecutionRunRepository;
 import com.curlrunner.repository.RequestResultRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class ExecutionEngineServiceImpl implements ExecutionEngineService {
@@ -29,6 +31,7 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
     private final ExecutionRunRepository executionRunRepository;
     private final RequestResultRepository requestResultRepository;
     private final ConcurrentHashMap<Long, Boolean> cancellationFlags = new ConcurrentHashMap<>();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ExecutionEngineServiceImpl(ExecutionRunRepository executionRunRepository,
                                       RequestResultRepository requestResultRepository) {
@@ -168,9 +171,10 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
             if (config.isDataDriven()) {
                 dataRow = config.getDataList().get(i - 1);
             }
+            ParsedRequest.ResolvedRequest resolvedRequest = request.resolve(dataRow);
             HttpRequest httpRequest = request.toHttpRequest(dataRow);
 
-            RequestResult result = executeIteration(run.getId(), i, httpRequest);
+            RequestResult result = executeIteration(run.getId(), i, httpRequest, resolvedRequest);
             requestResultRepository.save(result);
             listener.onIterationComplete(result);
             listener.onProgress(i, totalIterations);
@@ -224,8 +228,9 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
                         return null;
                     }
 
+                    ParsedRequest.ResolvedRequest resolvedRequest = request.resolve(dataRow);
                     HttpRequest httpRequest = request.toHttpRequest(dataRow);
-                    RequestResult result = executeIteration(run.getId(), iteration, httpRequest);
+                    RequestResult result = executeIteration(run.getId(), iteration, httpRequest, resolvedRequest);
 
                     int completed = completedCount.incrementAndGet();
                     listener.onIterationComplete(result);
@@ -259,11 +264,16 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
      * @param httpRequest     the HTTP request to send
      * @return a RequestResult with timing, status, and success information
      */
-    private RequestResult executeIteration(Long runId, int iterationNumber, HttpRequest httpRequest) {
+    private RequestResult executeIteration(Long runId, int iterationNumber, HttpRequest httpRequest,
+                                           ParsedRequest.ResolvedRequest resolvedRequest) {
         RequestResult result = new RequestResult();
         result.setRunId(runId);
         result.setIterationNumber(iterationNumber);
         result.setExecutedAt(LocalDateTime.now());
+        result.setRequestMethod(resolvedRequest.method());
+        result.setRequestUrl(resolvedRequest.url());
+        result.setRequestBody(resolvedRequest.body());
+        result.setRequestHeaders(serializeHeaders(resolvedRequest.headers()));
 
         long startTime = System.nanoTime();
 
@@ -288,5 +298,13 @@ public class ExecutionEngineServiceImpl implements ExecutionEngineService {
         }
 
         return result;
+    }
+
+    private String serializeHeaders(Map<String, String> headers) {
+        try {
+            return objectMapper.writeValueAsString(headers);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not save request headers", e);
+        }
     }
 }

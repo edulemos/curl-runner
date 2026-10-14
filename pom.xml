@@ -13,7 +13,7 @@
 
     <groupId>com.curlrunner</groupId>
     <artifactId>curl-runner</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0</version>
     <name>curl-runner</name>
     <description>Desktop utility to execute cURL commands repeatedly with iteration control, delay and parallelism</description>
 
@@ -40,6 +40,12 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Jackson support for Java date/time values in exported reports -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
         <!-- H2 Database (in-memory, runtime only) -->

@@ -40,6 +40,7 @@ public class InputPanel extends JPanel {
     private final JButton loadJsonButton;
     private final JButton clearJsonButton;
     private final JLabel jsonStatusLabel;
+    private final JButton exportButton;
     private final JButton executeButton;
     private final JButton cancelButton;
     private List<Map<String, Object>> loadedData;
@@ -106,10 +107,13 @@ public class InputPanel extends JPanel {
         jsonPanel.add(jsonStatusLabel);
 
         // Execute and Cancel buttons (right-aligned)
+        exportButton = new JButton("Export results");
+        exportButton.setEnabled(false);
         executeButton = new JButton("Run");
         cancelButton = new JButton("Cancel");
         cancelButton.setEnabled(false);
         JPanel actionButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        actionButtonsPanel.add(exportButton);
         actionButtonsPanel.add(executeButton);
         actionButtonsPanel.add(cancelButton);
 
@@ -208,6 +212,10 @@ public class InputPanel extends JPanel {
 
     public JButton getExecuteButton() {
         return executeButton;
+    }
+
+    public JButton getExportButton() {
+        return exportButton;
     }
 
     public JButton getCancelButton() {
